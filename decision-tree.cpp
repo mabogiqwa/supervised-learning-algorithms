@@ -2,6 +2,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 #include <algorithm>
 
 //Represents a single training instance pair (input-output)
@@ -20,11 +21,18 @@ struct Node {
     Node () : isLeaf(false) {}
 };
 
+std::string plurality_value(const std::vector<Example>& examples);
+//Precondition: The vector examples must not be empty where each Example
+//object must have a valid string label
+//Postcondition: Returns a string that occurs most frequently in examples.
+//if there is a tie between 1> labels, then the first one encountered will
+//be returned.
+
 int main()
 {
-    set<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
+    std::set<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
 
-    vector<Example> examples = {
+    std::vector<Example> examples = {
         {{{{"Alt","Yes"}, {"Bar","No"}, {"Fri/Sat","No"}, {"Hungry","Yes"}, {"Patrons","Some"}, {"Price","$$$"}, {"Rain","No"}, {"Reservation","Yes"}, {"Type","French"}, {"WaitEstimate","0-10"}}}, "Yes"},
         {{{{"Alt","Yes"}, {"Bar","No"}, {"Fri/Sat","No"}, {"Hungry","Yes"}, {"Patrons","Full"}, {"Price","$"}, {"Rain","No"}, {"Reservation","No"}, {"Type","Thai"}, {"WaitEstimate","30-60"}}}, "No"},
         {{{{"Alt","No"}, {"Bar","Yes"}, {"Fri/Sat","No"}, {"Hungry","No"}, {"Patrons","Some"}, {"Price","$"}, {"Rain","No"}, {"Reservation","No"}, {"Type","Burger"}, {"WaitEstimate","0-10"}}}, "Yes"},
@@ -41,4 +49,21 @@ int main()
 
 
     return 0;
+}
+
+std::string plurality_value(const std::vector<Example>& examples)
+{
+    std::map<std::string, int> count;
+    for (const auto& e : examples) {
+        count[e.label]++;
+    }
+
+    auto best = count.begin();
+    for (auto it = count.begin(); it != count.end(); ++it) {
+        if (it->second > best->second) {
+            best = it;
+        }
+    }
+
+    return best->first;
 }
