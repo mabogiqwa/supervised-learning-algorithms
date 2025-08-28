@@ -28,6 +28,38 @@ std::string plurality_value(const std::vector<Example>& examples);
 //if there is a tie between 1> labels, then the first one encountered will
 //be returned.
 
+bool same_classification(const std::vector<Example>& examples) {
+    if (examples.empty())
+        return true;
+
+    std::string firstLabel = examples[0].label;
+
+    for (const auto& e : examples) {
+        if (e.label != firstLabel)
+            return false;
+    }
+    return true;
+}
+//checks if all examples have the same classification
+
+std::string importance_function(const std::set<std::string>& attributes, const std::vector<Example>& examples) {
+    return *attributes.begin();
+}
+
+Node* learn_decision_tree(std::vector<Example> examples, std::set<std::string> attributes, std::vector<Example> parentExamples) {
+    Node* tree = new Node();
+}
+
+void deallocate_memory(Node* tree) {
+    if (tree == nullptr)
+        return;
+
+    for (auto& [val, child] : tree->children) {
+        deallocate_memory(child);
+    }
+
+    delete tree;
+}
 int main()
 {
     std::set<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
