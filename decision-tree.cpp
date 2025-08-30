@@ -102,6 +102,21 @@ void deallocate_memory(Node* tree) {
 
     delete tree;
 }
+
+std::string predict(Node *tree, const Example& e) {
+    if (!tree->label.empty()) { return tree->label; }
+
+    //std::string attributeValue = e.attributes.at(tree->attribute);
+
+    if (!tree->attribute.empty() && tree->children.count(tree->attribute)) {
+        std::string attributeValue = e.attributes.at(tree->attribute);
+
+        if (tree->children.count(attributeValue)) {
+            return predict(tree->children[attributeValue], e);
+        }
+    }
+    return "Unknown";
+}
 int main()
 {
     std::set<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
@@ -126,7 +141,12 @@ int main()
     //std::cout << same_classification(examples);
 
     Node* tree = learn_decision_tree(examples, attributes, {});
+
     print_tree(tree);
+
+    Example test = { {{"Alt","Yes"},{"Bar","No"},{"Fri","No"},{"Hun","Yes"},{"Pat","Full"},{"Price","$$$"},{"Rain","No"},{"Res","Yes"},{"Type","French"},{"Est","0-10"}}, "" };
+    std::cout << "Prediction: " << predict(tree, test) << std::endl;
+
     deallocate_memory(tree);
     return 0;
 }
