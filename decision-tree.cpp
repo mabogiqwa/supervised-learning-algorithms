@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 //Represents a single training instance pair (input-output)
 struct Example {
@@ -32,64 +33,90 @@ bool same_classification(const std::vector<Example>& examples);
 //Precondition: Each example object in the vector must have a valid label
 //Postcondition: The function return true if examples is empty or all label values in examples are identical
 
+double entropy(const std::vector<Example>& examples);
+//Precondition: Each example object must have a label and the label should not
+//be empty
+//Postcondition: Returns a double value representing Shannon entropy
+
+std::map<std::string, std::vector<Example>> splitByAttribute(const std::vector<Example>& examples, const std::string& attr) {
+    std::map<std::string, std::vector<Example>> subsets;
+    for (const auto& e : examples) {
+        auto it = e.attributes.find(attr);
+        if (it != e.attributes.end())
+            subsets[it->second].push_back(e);
+    }
+    return subsets;
+}
+
+std::string choose_best_attribute(std::vector<Example>& examples, std::vector<std::string>& attributes) {
+    double baseEntropy = entropy(examples);
+    double bestGain = -1.0;
+    std::string bestAttr;
+
+    for (const auto& attr : attributes) {
+        auto subsets = splitByAttribute(examples, attr);
+        double newEntropy = 0.0;
+        for (const auto& pair : subsets) {
+            double p = (double)pair.second.size() / examples.size();
+            newEntropy += p * entropy(pair.second);
+        }
+        double infoGain = baseEntropy - newEntropy;
+        if (infoGain > bestGain) {
+            bestGain = infoGain;
+            bestAttr = attr;
+        }
+    }
+    return bestAttr;
+}
+
+
 std::string importance_function(const std::set<std::string>& attributes, const std::vector<Example>& examples) {
     return *attributes.begin();
 }
 
-void print_tree(Node* tree, std::string indent="") {
+void print_tree(Node* tree, std::string indent = "") {
     if (tree->isLeaf) {
         std::cout << indent << "Leaf: " << tree->label << std::endl;
     } else {
         std::cout << indent << "Attribute: " << tree->attribute << std::endl;
         for (const auto& [val, child] : tree->children) {
-            std::cout << indent << "  If " << tree->attribute << " = " << val << ": " << std::endl;
+            std::cout << indent << "  If " << tree->attribute << " = " << val << ":" << std::endl;
             print_tree(child, indent + "    ");
         }
     }
 }
 
-Node* learn_decision_tree(std::vector<Example> examples, std::set<std::string> attributes, std::vector<Example> parentExamples) {
+Node* learn_decision_tree(std::vector<Example> examples, std::vector<std::string> attributes) {
     Node* tree = new Node();
 
     if (examples.empty()) {
+        tree->label = "Unknown";
         tree->isLeaf = true;
-        tree->label = plurality_value(parentExamples);
         return tree;
     }
-    else if (same_classification(examples)) {
-        tree->isLeaf = true;
+    if (same_classification(examples)) {
         tree->label = examples[0].label;
-        return tree;
-    }
-    else if (attributes.empty()) {
         tree->isLeaf = true;
+        return tree;
+    }
+    if (attributes.empty()) {
         tree->label = plurality_value(examples);
+        tree->isLeaf = true;
         return tree;
     }
-    else {
-        std::string A = importance_function(attributes, examples);
-        tree->attribute = A;
 
-        //Collecting all possible values of A
-        std::set<std::string> values;
-        for (const auto& e : examples) {
-            values.insert(e.attributes.at(A));
-        }
+    std::string bestAttr = choose_best_attribute(examples, attributes);
+    tree->attribute = bestAttr;
 
-        for (const std::string& v : values) {
-            std::vector<Example> exmples;
-            for (const auto& e : examples) {
-                if (e.attributes.at(A) == v)
-                    exmples.push_back(e);
-            }
-            std::set<std::string> newAttributes = attributes;
-            newAttributes.erase(A);
+    auto subsets = splitByAttribute(examples, bestAttr);
+    std::vector<std::string> remainingAttrs;
+    for (const auto& attr : attributes) if (attr != bestAttr) remainingAttrs.push_back(attr);
 
-            Node* subtree = learn_decision_tree(exmples, newAttributes, examples);
-            tree->children[v] = subtree;
-        }
-        return tree;
+    for (const auto& pair : subsets) {
+        tree->children[pair.first] = learn_decision_tree(pair.second, remainingAttrs);
     }
+
+    return tree;
 }
 
 void deallocate_memory(Node* tree) {
@@ -103,23 +130,21 @@ void deallocate_memory(Node* tree) {
     delete tree;
 }
 
-std::string predict(Node *tree, const Example& e) {
-    if (!tree->label.empty()) { return tree->label; }
+std::string predict(Node* tree, const Example& e) {
+    if (tree->isLeaf || !tree->label.empty()) return tree->label;
 
-    //std::string attributeValue = e.attributes.at(tree->attribute);
-
-    if (!tree->attribute.empty() && tree->children.count(tree->attribute)) {
-        std::string attributeValue = e.attributes.at(tree->attribute);
-
-        if (tree->children.count(attributeValue)) {
-            return predict(tree->children[attributeValue], e);
-        }
+    auto it = e.attributes.find(tree->attribute);
+    if (it != e.attributes.end()) {
+        auto childIt = tree->children.find(it->second);
+        if (childIt != tree->children.end())
+            return predict(childIt->second, e);
     }
     return "Unknown";
 }
+
 int main()
 {
-    std::set<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
+    std::vector<std::string> attributes = {"Alt","Bar","Fri/Sat","Hungry","Patrons","Price","Rain","Reservation","Type","WaitEstimate"};
 
     std::vector<Example> examples = {
         {{{{"Alt","Yes"}, {"Bar","No"}, {"Fri/Sat","No"}, {"Hungry","Yes"}, {"Patrons","Some"}, {"Price","$$$"}, {"Rain","No"}, {"Reservation","Yes"}, {"Type","French"}, {"WaitEstimate","0-10"}}}, "Yes"},
@@ -140,43 +165,49 @@ int main()
 
     //std::cout << same_classification(examples);
 
-    Node* tree = learn_decision_tree(examples, attributes, {});
+    Node* tree = learn_decision_tree(examples, attributes);
 
     print_tree(tree);
 
-    Example test = { {{"Alt","Yes"},{"Bar","No"},{"Fri","No"},{"Hun","Yes"},{"Pat","Full"},{"Price","$$$"},{"Rain","No"},{"Res","Yes"},{"Type","French"},{"Est","0-10"}}, "" };
+    Example test = {
+        {{"Alt","Yes"}, {"Bar","No"}, {"Fri/Sat","No"}, {"Hungry","Yes"},
+         {"Patrons","Some"}, {"Price","$$$"}, {"Rain","No"}, {"Reservation","Yes"},
+         {"Type","French"}, {"WaitEstimate","0-10"}}, ""};
+
+    std::cout << std::endl;
     std::cout << "Prediction: " << predict(tree, test) << std::endl;
 
     deallocate_memory(tree);
     return 0;
 }
 
-std::string plurality_value(const std::vector<Example>& examples)
-{
-    std::map<std::string, int> count;
-    for (const auto& e : examples) {
-        count[e.label]++;
+double entropy(const std::vector<Example>& examples) {
+    std::map<std::string, int> labelCounts;
+    for (const auto& e : examples) labelCounts[e.label]++;
+
+    double ent = 0.0;
+    int total = examples.size();
+    for (const auto& pair : labelCounts) {
+        double p = (double)pair.second / total;
+        ent -= p * log2(p);
     }
+    return ent;
+}
+
+std::string plurality_value(const std::vector<Example>& examples) {
+    std::map<std::string, int> count;
+    for (const auto& e : examples) count[e.label]++;
 
     auto best = count.begin();
     for (auto it = count.begin(); it != count.end(); ++it) {
-        if (it->second > best->second) {
-            best = it;
-        }
+        if (it->second > best->second) best = it;
     }
-
     return best->first;
 }
 
 bool same_classification(const std::vector<Example>& examples) {
-    if (examples.empty())
-        return true;
-
+    if (examples.empty()) return true;
     std::string firstLabel = examples[0].label;
-
-    for (const auto& e : examples) {
-        if (e.label != firstLabel)
-            return false;
-    }
+    for (const auto& e : examples) if (e.label != firstLabel) return false;
     return true;
 }
